@@ -57,7 +57,8 @@ packages/fluxvla-export/
 ```
 
 不得通过复制整个 `fluxvla/` 或依赖根包来快速完成该目录；PI0.5 实现阶段应按真实
-import 链提取最小推理依赖。
+import 链提取最小推理依赖。公共计算迁移为独立包中的唯一实现，原训练代码通过适配复用，
+不能在两个目录分别维护 PI0.5 模型。
 
 ## 唯一公共入口
 
@@ -67,7 +68,7 @@ from pathlib import Path
 from fluxvla_export import prepare_tensorrt
 
 prepared = prepare_tensorrt(
-    recipe='pi05-aloha-v1',
+    recipe='pi05-v1',
     checkpoint=Path('model.safetensors'),
     inputs=Path('export_inputs.safetensors'),
     device='cuda:0',
@@ -84,6 +85,10 @@ def prepare_tensorrt(
 ) -> PreparedDeployment:
     ...
 ```
+
+以上签名是当前骨架接口，`pi05-v1` 仅为未注册的家族 recipe 示例，尚不能运行。
+PI0.5 依赖分析后建议增加必填 `config` 参数，显式接收与 checkpoint 对应的版本化部署配置；
+该变更待 Review，尚未实现。机器人差异由配置表达，不按机器人复制模型或 recipe 实现。
 
 所有参数显式传入。checkpoint 与 recipe 的自动发现由上层 artifact manifest 负责，
 不放在本包首期范围内。
