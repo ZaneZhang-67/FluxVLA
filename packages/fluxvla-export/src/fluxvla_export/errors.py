@@ -16,7 +16,11 @@ class ContractError(FluxVLAExportError, ValueError):
 
 
 class ArtifactError(FluxVLAExportError, ValueError):
-    """An input artifact is missing or uses an unsupported format."""
+    """An input artifact is missing, invalid, or inconsistent."""
+
+
+class ConfigError(FluxVLAExportError, ValueError):
+    """A versioned deployment configuration is invalid or unsupported."""
 
 
 class RecipeNotFoundError(FluxVLAExportError, LookupError):

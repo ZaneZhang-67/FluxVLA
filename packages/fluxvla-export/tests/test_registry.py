@@ -16,7 +16,7 @@ class RegistryTest(unittest.TestCase):
         class Recipe:
             name = recipe_name
 
-            def prepare(self, *, checkpoint, inputs, device):
+            def prepare(self, *, config, checkpoint, inputs, device):
                 raise AssertionError('not called')
 
         register_recipe(recipe_name)(Recipe)
@@ -28,7 +28,7 @@ class RegistryTest(unittest.TestCase):
         class Recipe:
             name = recipe_name
 
-            def prepare(self, *, checkpoint, inputs, device):
+            def prepare(self, *, config, checkpoint, inputs, device):
                 raise AssertionError('not called')
 
         register_recipe(recipe_name)(Recipe)

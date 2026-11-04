@@ -11,9 +11,13 @@ from __future__ import annotations
 import operator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Mapping, Protocol, Sequence, Tuple
+from typing import (TYPE_CHECKING, Any, Callable, Mapping, Protocol,
+                    Sequence, Tuple)
 
 from .errors import ContractError
+
+if TYPE_CHECKING:
+    from .config import DeploymentConfig
 
 Shape = Tuple[int, ...]
 
@@ -347,6 +351,7 @@ class ExportRecipe(Protocol):
     def prepare(
         self,
         *,
+        config: DeploymentConfig,
         checkpoint: Path,
         inputs: Path,
         device: str,

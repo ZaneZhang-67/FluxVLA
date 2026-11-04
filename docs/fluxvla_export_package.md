@@ -37,7 +37,9 @@ packages/fluxvla-export/
 │   ├── py.typed             # PEP 561 类型标记
 │   ├── api.py               # prepare_tensorrt
 │   ├── contracts.py         # PreparedDeployment/PreparedGraph/TensorSpec
-│   ├── checkpoint.py        # 安全加载 safetensors、严格校验 key/shape
+│   ├── config.py            # 版本化 JSON 配置及跨字段校验
+│   ├── _safetensors.py      # 共享格式、SHA-256 和安全读取检查
+│   ├── checkpoint.py        # 严格校验完整 state 的 key/shape/dtype
 │   ├── fixture.py           # 加载预处理输入并校验契约
 │   ├── errors.py            # 可定位的公开异常
 │   ├── registry.py          # 包内静态 recipe 注册，不做第三方插件发现
@@ -52,8 +54,9 @@ packages/fluxvla-export/
     ├── test_api.py
     ├── test_contracts.py
     ├── test_registry.py
-    ├── test_checkpoint.py     # PI0.5 实现阶段增加
-    └── test_fixture.py        # PI0.5 实现阶段增加
+    ├── test_config.py
+    ├── test_checkpoint.py
+    └── test_fixture.py
 ```
 
 不得通过复制整个 `fluxvla/` 或依赖根包来快速完成该目录；PI0.5 实现阶段应按真实
@@ -69,6 +72,7 @@ from fluxvla_export import prepare_tensorrt
 
 prepared = prepare_tensorrt(
     recipe='pi05-v1',
+    config=Path('export_config.json'),
     checkpoint=Path('model.safetensors'),
     inputs=Path('export_inputs.safetensors'),
     device='cuda:0',
@@ -79,6 +83,7 @@ prepared = prepare_tensorrt(
 def prepare_tensorrt(
     *,
     recipe: str,
+    config: str | Path,
     checkpoint: str | Path,
     inputs: str | Path,
     device: str,
@@ -86,9 +91,9 @@ def prepare_tensorrt(
     ...
 ```
 
-以上签名是当前骨架接口，`pi05-v1` 仅为未注册的家族 recipe 示例，尚不能运行。
-PI0.5 依赖分析后建议增加必填 `config` 参数，显式接收与 checkpoint 对应的版本化部署配置；
-该变更待 Review，尚未实现。机器人差异由配置表达，不按机器人复制模型或 recipe 实现。
+以上 `config` 参数及配置校验已实现；`pi05-v1` 是配置支持的家族协议，但尚未注册模型
+recipe，因此上例还不能完成模型准备。公共入口读取版本化 JSON，recipe 收到已解析的
+不可变 `DeploymentConfig`。机器人差异由配置表达，不按机器人复制模型或 recipe 实现。
 
 所有参数显式传入。checkpoint 与 recipe 的自动发现由上层 artifact manifest 负责，
 不放在本包首期范围内。
@@ -161,6 +166,7 @@ class ExportRecipe(Protocol):
     def prepare(
         self,
         *,
+        config: DeploymentConfig,
         checkpoint: Path,
         inputs: Path,
         device: str,
@@ -176,9 +182,20 @@ FluxHermes 只依赖以上契约，不导入 PI0.5 内部模块。构建期 exec
 首期由训练环境生成，目标构建机只消费：
 
 ```text
+export_config.json
 model.safetensors
 export_inputs.safetensors
 ```
+
+schema 1 显式描述模型结构、精度、推理方式、六个输入的静态契约、预处理来源，并通过
+SHA-256 绑定两个 safetensors 文件。暂仅接受 FP32 master 权重、FP32/BF16 autocast
+参考设置、原生完整 dense checkpoint 和普通 Euler；未合并 LoRA、RTC、外部命名格式、
+FP16 执行设置及动态 fixture 在本版明确拒绝。配置解析成功不等于模型已经能够运行。
+
+`load_config` 可独立调用，不执行 Python 配置或发现邻近文件；`load_fixture` 返回真实 CPU
+输入；`load_checkpoint` 按调用方提供的完整 `expected_state` 校验 key/shape/dtype，
+不修改预期 state、不改名、不隐式转换 dtype。两个读取器都验证文件格式、摘要和非有限值。
+实际 PI0.5 state 的构造与完整键集合校验仍需下一阶段 recipe。
 
 `export_inputs.safetensors` 保存已经完成 tokenizer、图像处理、状态归一化和 padding
 的 tensor，并显式包含用于 parity 的固定 noise。它不包含原始数据或 pickle。
@@ -201,5 +218,10 @@ recipe 负责严格验证：
 
 ## 当前实现状态
 
-包骨架、公共契约、静态 recipe registry、API 分发和基础测试已经实现；当前没有
-注册任何内置 recipe。下一阶段才提取 PI0.5 最小推理依赖并实现首个 recipe。
+包骨架、公共契约、版本化部署配置、带 config 的 API 分发、真实 safetensors 读取器和
+严格错误检查已实现。新增测试使用真实 JSON、safetensors 和 torch tensors；API 测试中的
+临时注册类只验证分发，不代替 PI0.5 模型。当前仍没有任何内置模型 recipe。
+
+公共 import 和配置解析不加载 torch 或训练栈。独立包测试从训练 CI 中分离，构建 wheel
+后在隔离环境运行，支持 Fork 功能分支触发。下一阶段才迁移共享 PI0.5 计算代码并实现
+真实参考推理；本阶段不能证明完整 checkpoint 或 ONNX/TensorRT 的数值、性能正确。
