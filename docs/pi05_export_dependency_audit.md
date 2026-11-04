@@ -1,6 +1,7 @@
 # PI0.5 最小推理依赖与提取方案
 
-状态：待 Review，仅源码分析，尚未提取模型或验证独立模型推理。
+状态：分析方案已 Review。本文保留实施前的源码分析基线；配置/API/读取器和底层组件
+迁移现已完成，完整 PI0.5 policy 与导出 recipe 尚未迁移。实施验证见包设计说明。
 
 分析基线：`feature/fluxvla-export` 的 `3eed849`；模型源码对应上游 `cd9206a`。
 本文链接固定到这两个提交，避免后续迁移导致证据行号失效。
@@ -157,8 +158,9 @@ prepared = prepare_tensorrt(
 
 | 块 | 内容 | 验收 |
 | --- | --- | --- |
-| 下一块 | 配置 schema/API 分发、checkpoint/fixture 的真实 safetensors 读取与严格错误检查 | 能解析有效输入；缺失/错配/不支持配置可定位地失败；不生成假模型结果 |
-| 共享 core 迁移 | 先留存旧实现的数值基线，再迁移公共计算并改训练适配 | 真实小模型参数 key/shape、prefix、单步 velocity、最终 action 与迁移前对照；训练 forward/backward 回归 |
+| 配置与读取（已完成） | 配置 schema/API 分发、checkpoint/fixture 的真实 safetensors 读取与严格错误检查 | 有效输入可解析；缺失/错配/不支持配置明确失败；无假模型结果 |
+| 共享底层组件（本块完成） | 先留存原实现，再迁移 Gemma/SigLIP/projector/纯 tensor helpers，训练侧适配复用 | 40 组原版/迁移版比较完全一致；参数、prefix、velocity、action、梯度均对照；CPU 回归与独立 wheel 通过 |
+| 共享 policy 层（后续） | 继续迁移 PI0.5 embedding、denoising、普通 Euler，训练保留 loss/联合 forward | 同样检查原版数值与完整参数层级，不复制第二份 policy |
 | 独立包闭环 | 新环境仅安装 wheel 和推理依赖，用真实 nn.Module/Tensor、实际 safetensors 做参考推理 | 不借助 FluxVLA namespace 或完整仓库；支持不同视图数/窗口/维度配置；重复运行不改 fixture/RNG |
 | 真实权重及加速 | 使用与实际 checkpoint 配套的配置和输入，之后接 ONNX/TensorRT | 真实目标设备上的输出误差、性能、日志及构建产物 |
 

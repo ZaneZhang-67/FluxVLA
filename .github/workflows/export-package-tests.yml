@@ -31,9 +31,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ['3.10', '3.12']
+        include:
+          - {python: '3.10', torch: '2.8.0'}
+          - {python: '3.12', torch: '2.8.0'}
+          - {python: '3.12', torch: '2.6.0'}
     env:
       CUDA_VISIBLE_DEVICES: ''
+      HF_HUB_OFFLINE: '1'
       PYTHONNOUSERSITE: '1'
       PIP_DISABLE_PIP_VERSION_CHECK: '1'
     steps:
@@ -53,7 +57,7 @@ jobs:
         run: |
           python -m venv "$RUNNER_TEMP/export-runtime"
           runtime="$RUNNER_TEMP/export-runtime/bin/python"
-          "$runtime" -m pip install --no-deps torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+          "$runtime" -m pip install --no-deps "torch==${{ matrix.torch }}" --index-url https://download.pytorch.org/whl/cpu
           wheels=("$RUNNER_TEMP"/export-dist/*.whl)
           test "${#wheels[@]}" -eq 1
           "$runtime" -m pip install "${wheels[0]}[test]" numpy==1.26.4
@@ -71,7 +75,8 @@ jobs:
           assert available_recipes() == ()
           assert 'torch' not in sys.modules
           assert 'safetensors' not in sys.modules
-          for name in ('fluxvla', 'fluxhermes', 'mmengine', 'transformers', 'triton'):
+          assert 'transformers' not in sys.modules
+          for name in ('fluxvla', 'fluxhermes', 'mmengine', 'accelerate', 'timm', 'triton', 'torchvision'):
               assert importlib.util.find_spec(name) is None, name
           assert importlib.resources.files('fluxvla_export').joinpath('py.typed').is_file()
           dist = importlib.metadata.distribution('fluxvla-export')

@@ -7,9 +7,11 @@ ONNX export, TensorRT building, parity checks, benchmarks and bundles.
 ## Current scope
 
 Implemented: versioned deployment configuration, safe artifact readers, tensor
-contracts, and validated API dispatch. **No model recipe is registered yet.**
-There is no PI0.5 model construction, checkpoint conversion, ONNX/TensorRT
-export or model parity result in this package yet.
+contracts, validated API dispatch, and shared Gemma/SigLIP/projector/tensor
+computation reused by FluxVLA training. **No model recipe is registered yet.**
+Full PI0.5 construction and policy orchestration are still in the training repo;
+this package does not yet provide a PI0.5 reference runner or ONNX/TensorRT
+export. Component migration parity is tested separately from export parity.
 
 Schema 1 describes the proposed `pi05-v1` family, not a particular robot. It
 accepts static six-input fixtures, complete native dense weights, plain Euler
@@ -19,6 +21,37 @@ profiles, unmerged adapters, RTC and external checkpoint naming are explicitly
 unsupported in this schema. This is a configuration boundary, not a claim of
 validated model execution.
 
+## Shared component boundary
+
+Explicitly import the component you need; the namespace itself remains lazy:
+
+```python
+from fluxvla_export.components.condition_gemma import ConditionGemmaModel
+from fluxvla_export.components.siglip import SigLIPViTBackbone
+from fluxvla_export.components.projector import LinearProjector
+from fluxvla_export.components.tensor_utils import make_att_2d_masks
+```
+
+- `ConditionGemmaModel` keeps the original keyword constructor, RMS/AdaRMS,
+  attention, decoder, protected-FP32 operations and cache behavior. Generation
+  and classification heads, registration and FSDP remain in training adapters.
+- `SigLIPViTBackbone` accepts an actual constructed HF `SiglipVisionModel` as
+  `vision`, plus `openpi_stem_fp32` and `preserve_fp32_residuals`. It owns the
+  shared packed-multiview forward and FP32 stem. Training alone resolves legacy
+  vision IDs, pretrained loading and FSDP policies.
+- `LinearProjector(in_dim, out_dim)` and ten pure tensor helpers are directly
+  reexported by their old training import paths. Sampling, image preprocessing
+  and NumPy-specific training utilities stay outside this package.
+- No `core.*` module wrapper is introduced. Existing paths such as
+  `llm_backbone.layers.*`, `vision_backbone.vision.*` and `projector.projector.*`
+  remain unchanged, including unused expert embeddings required by checkpoints.
+
+Deployment still requires a complete, strictly loaded native state. These
+constructors do not infer architecture, download weights or register recipes.
+The old PI0/PI0.5 embedding/denoising/Euler/loss code has not yet moved. Tests of
+those policies currently use the repository's explicit CPU test bootstrap;
+independent wheel tests import shared components normally, without that bootstrap.
+
 ## Install and test
 
 ```bash
@@ -27,13 +60,28 @@ python -m pip install './packages/fluxvla-export[test]'
 python -m unittest discover -s packages/fluxvla-export/tests -v
 ```
 
-The readers use PyTorch 2.8 and safetensors 0.6.2-compatible releases. The runtime
+Shared models use `transformers==5.3.0`; artifact readers use safetensors
+0.6.2-compatible releases. PyTorch 2.6 and 2.8 are CPU test baselines, retaining
+existing training environments without implicitly upgrading Torch. The runtime
 also declares `packaging`: safetensors' torch integration imports it without a
-core dependency declaration. The test extra supplies NumPy, required by
-safetensors' test-file writer. Model libraries
-such as Transformers are not needed by this block. Importing the public package
-or parsing a config does not import torch, safetensors or the training stack.
-Missing test dependencies are errors, not reasons to silently skip tensor tests.
+core dependency declaration. The test extra supplies NumPy for safetensors'
+test-file writer (Transformers also requires NumPy transitively).
+
+Importing the public package, component namespace or parsing a config does not
+import torch, safetensors, Transformers or the training stack. Missing test
+dependencies are errors, not reasons to silently skip tensor tests. CUDA/FSDP
+and target-device accuracy are not established by these CPU checks.
+
+For training development, install this same checkout's package before the root
+package. The environment installer/updater and CPU CI do this explicitly:
+
+```bash
+python -m pip install -e ./packages/fluxvla-export
+python -m pip install --no-build-isolation -e .
+```
+
+The second command belongs to the full FluxVLA training environment and is not
+needed to use or test this independent package.
 
 ## Explicit deployment configuration
 

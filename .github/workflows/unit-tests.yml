@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [master, main]
   push:
-    branches: [master, main]
+    branches: [master, main, feature/fluxvla-export]
   workflow_dispatch:
     inputs:
       run_gpu:
@@ -52,6 +52,7 @@ jobs:
           # pinned test requirements below, without temporarily installing NumPy 2.
           python -m pip install --no-deps torch==2.8.0 torchvision==0.23.0 --index-url https://download.pytorch.org/whl/cpu
           python -m pip install -r test/requirements-cpu.txt
+          python -m pip install -e './packages/fluxvla-export[test]'
           python -m pip check
 
       - name: Check and record the CPU runtime
